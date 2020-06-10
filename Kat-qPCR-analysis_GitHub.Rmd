@@ -1,0 +1,300 @@
+---
+title: "Kat-par3, par6, aPKC, lgl, dlg qPCR analysis"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Check and instal packages
+```{r}
+## Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+## install packages
+if(!require(pcr))
+install.packages('pcr', repos = "http://cran.us.r-project.org")
+## https://cran.r-project.org/web/packages/pcr/vignettes/qpcr_analysis.html
+
+if(!require(knitr))
+install.packages("knitr", repos = "http://cran.us.r-project.org")
+
+if(!require(kableExtra))
+install.packages("kableExtra", repos = "http://cran.us.r-project.org")
+
+
+if(!require(ggplot2))
+install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+
+## install.packages("cowplot")
+```
+
+
+Load libraries
+```{r}
+library(pcr)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+#library(cowplot)
+```
+
+
+Locate and read raw ct data
+```{r}
+setwd()
+
+fl <- read.csv("145-repeat.csv", header=TRUE, sep=",", dec=".")
+```
+
+Analyze par3, par6 and aPKC data (with three biological replicates)
+```{r}
+fl.mean <- aggregate(fl[, 2:ncol(fl)], list(fl$Sample.Name), mean)
+
+#remove the 1st column (group name), because we know it is organized as each dpf (0-7 dpf) for the three 3 repeats. 
+#Without dropping the 1st column, pcr_analyze will recognize the 1st column as numerical data.
+fl.mean2 <- fl.mean[ -c(1) ]
+
+## create grouping variable
+group_var <- rep(c('0-dpf', '1-dpf', '2-dpf', '3-dpf', '4-dpf', '5-dpf', '6-dpf', '7-dpf'), each = 3)
+
+#to avoid batch difference, we substract internal control within each replicate and then normalize three repeats by 'same_tube'
+#normalize to Hsp70
+result.ref_Hsp70 <- pcr_analyze(fl.mean2,
+  group_var = group_var,
+  reference_gene = 'Hsp70',
+  reference_group = '0-dpf',
+  mode = 'same_tube')
+
+#normalize to 18s
+result.ref_X18s <- pcr_analyze(fl.mean2,
+  group_var = group_var,
+  reference_gene = 'X18s',
+  reference_group = '0-dpf',
+  mode = 'same_tube')
+```
+
+```{r}
+#output analyzed data as .csv files
+write.csv(result.ref_Hsp70,paste(wd, "/ddCT_ref-Hsp70.csv", sep=""), row.names = FALSE)
+write.csv(result.ref_X18s,paste(wd, "/ddCT_ref-18s.csv", sep=""), row.names = FALSE)
+
+#output data for HTML format
+knitr::kable(result.ref_Hsp70, caption = 'RT-qPCR_ref-Hsp70')
+knitr::kable(result.ref_X18s, caption = 'RT-qPCR_ref-18s')
+```
+
+Extract relative expression results of target genes from the analysis
+````{r}
+#extract target gene data
+par3.Hsp70 <- result.ref_Hsp70[result.ref_Hsp70$gene == "par3",]
+par6.Hsp70 <- result.ref_Hsp70[result.ref_Hsp70$gene == "par6",]
+aPKC.Hsp70 <- result.ref_Hsp70[result.ref_Hsp70$gene == "aPKC",]
+
+par3.18s <- result.ref_X18s[result.ref_X18s$gene == "par3",]
+par6.18s <- result.ref_X18s[result.ref_X18s$gene == "par6",]
+aPKC.18s <- result.ref_X18s[result.ref_X18s$gene == "aPKC",]
+
+#add numerical dpf as a new column so each dot can be connected, instead of discrete 'group' for X value
+par3.Hsp70$dpf <- 0:7
+par6.Hsp70$dpf <- 0:7
+aPKC.Hsp70$dpf <- 0:7
+
+par3.18s$dpf <- 0:7
+par6.18s$dpf <- 0:7
+aPKC.18s$dpf <- 0:7
+```
+
+Visualize relative expression data (to Hsp70) by ggplot
+```{r}
+#visualize par3.Hsp70 data by ggplot
+#plot data
+ggplot(par3.Hsp70, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  #geom_ribbon(aes(ymin=lower, ymax=upper), fill='light gray', alpha = 20) +
+  #geom_path(lineend="butt", linejoin="round", linemitre=1, colour='orange')+
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'par3 reference to Hsp70') +
+  #geom_point(aes(dpf, lower), colour = 'red', size = 1) +
+  #geom_point(aes(dpf, upper), colour = 'blue', size = 1) 
+
+ggsave("par3-Hsp70.png", width = 6, height = 4) #save plot
+ggsave("par3-Hsp70.pdf", width = 6, height = 4)
+
+#visualize par6.Hsp70 data by ggplot
+ggplot(par6.Hsp70, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'par6 reference to Hsp70') +
+
+ggsave("par6-Hsp70.png", width = 6, height = 4) #save plot
+ggsave("par6-Hsp70.pdf", width = 6, height = 4)
+
+#visualize aPKC.Hsp70 data by ggplot
+ggplot(aPKC.Hsp70, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'aPKC reference to Hsp70') +
+
+ggsave("aPKC-Hsp70.png", width = 6, height = 4) #save plot
+ggsave("aPKC-Hsp70.pdf", width = 6, height = 4)
+```
+
+Visualize relative expression data (to 18s) by ggplot
+```{r}
+#visualize par3.18s data by ggplot
+#plot data
+ggplot(par3.18s, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'par3 reference to 18s') +
+ 
+
+ggsave("par3-18s.png", width = 6, height = 4) #save plot
+ggsave("par3-18s.pdf", width = 6, height = 4)
+
+#visualize par6.18s data by ggplot
+ggplot(par6.18s, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'par6 reference to 18s') +
+
+ggsave("par6-18s.png", width = 6, height = 4) #save plot
+ggsave("par6-18s.pdf", width = 6, height = 4)
+
+#visualize aPKC.18s data by ggplot
+ggplot(aPKC.18s, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'aPKC reference to 18s') +
+
+ggsave("aPKC-18s.png", width = 6, height = 4) #save plot
+ggsave("aPKC-18s.pdf", width = 6, height = 4)
+```
+
+
+
+Analyze lgl and dlg data (with only two biological replicates)
+```{r}
+# make sub-fl of lgl and dlg data, without NA (pick repeat 4 and 5)
+fl2 <- fl[!is.na(fl$lgl),]
+
+#calculate mean CT of three experimental repeats
+fl2.mean <- aggregate(fl2[, 2:ncol(fl)], list(fl2$Sample.Name), mean)
+
+#remove the 1st column (group name), because we know it is organized as each dpf (0-7 dpf) for the three 3 repeats. 
+#Without dropping the 1st column, pcr_analyze will recognize the 1st column as numerical data.
+fl2.mean2 <- fl2.mean[ -c(1) ]
+
+## create grouping variable
+group_var2 <- rep(c('0-dpf', '1-dpf', '2-dpf', '3-dpf', '4-dpf', '5-dpf', '6-dpf', '7-dpf'), each = 2)
+
+#to avoid batch difference, we substract internal control within each replicate and then normalize three repeats by 'same_tube'
+#normalize to Hsp70
+result2.ref_Hsp70 <- pcr_analyze(fl2.mean2,
+  group_var = group_var2,
+  reference_gene = 'Hsp70',
+  reference_group = '0-dpf',
+  mode = 'same_tube')
+
+#normalize to 18s
+result2.ref_X18s <- pcr_analyze(fl2.mean2,
+  group_var = group_var2,
+  reference_gene = 'X18s',
+  reference_group = '0-dpf',
+  mode = 'same_tube')
+
+#output analyzed data as .csv files
+write.csv(result2.ref_Hsp70,paste(wd, "/ddCT2_ref-Hsp70.csv", sep=""), row.names = FALSE)
+write.csv(result2.ref_X18s,paste(wd, "/ddCT2_ref-18s.csv", sep=""), row.names = FALSE)
+
+#output data for HTML format
+knitr::kable(result2.ref_Hsp70, caption = 'RT-qPCR2_ref-Hsp70')
+knitr::kable(result2.ref_X18s, caption = 'RT-qPCR2_ref-18s')
+```
+
+
+Extract relative expression results of target genes from the analysis
+````{r}
+#extract target gene data
+lgl.Hsp70 <- result2.ref_Hsp70[result2.ref_Hsp70$gene == "lgl",]
+dlg.Hsp70 <- result2.ref_Hsp70[result2.ref_Hsp70$gene == "dlg",]
+
+lgl.18s <- result2.ref_X18s[result2.ref_X18s$gene == "lgl",]
+dlg.18s <- result2.ref_X18s[result2.ref_X18s$gene == "dlg",]
+
+#add numerical dpf as a new column so each dot can be connected, instead of discrete 'group' for X value
+lgl.Hsp70$dpf <- 0:7
+dlg.Hsp70$dpf <- 0:7
+
+lgl.18s$dpf <- 0:7
+dlg.18s$dpf <- 0:7
+```
+
+Visualize relative expression data (to Hsp70) by ggplot
+```{r}
+#visualize lgl.Hsp70 data by ggplot
+#plot data
+ggplot(lgl.Hsp70, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'lgl reference to Hsp70') +
+
+ggsave("lgl-Hsp70.png", width = 6, height = 4) #save plot
+ggsave("lgl-Hsp70.pdf", width = 6, height = 4)
+
+#visualize dlg.Hsp70 data by ggplot
+ggplot(dlg.Hsp70, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'dlg reference to Hsp70') +
+
+ggsave("dlg-Hsp70.png", width = 6, height = 4) #save plot
+ggsave("dlg-Hsp70.pdf", width = 6, height = 4)
+```
+
+Visualize relative expression data (to 18s) by ggplot
+```{r}
+#visualize lgl.18s data by ggplot
+#plot data
+ggplot(lgl.18s, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'lgl reference to 18s') +
+ 
+
+ggsave("lgl-18s.png", width = 6, height = 4) #save plot
+ggsave("lgl-18s.pdf", width = 6, height = 4)
+
+#visualize dlg.18s data by ggplot
+ggplot(dlg.18s, aes(dpf, relative_expression)) +
+  geom_smooth(method = 'loess', colour='orange') + #The Loess smoothing algorithm was utilized to curve-fit scatterplots.
+  geom_point(size = 3) +
+  geom_pointrange(aes(ymin=lower, ymax=upper)) + #add error bars
+  labs(x = 'dpf', y = 'Relative mRNA expression') +
+  ggtitle(label = 'dlg reference to 18s') +
+
+ggsave("dlg-18s.png", width = 6, height = 4) #save plot
+ggsave("dlg-18s.pdf", width = 6, height = 4)
+```
